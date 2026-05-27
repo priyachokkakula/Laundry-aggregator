@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Laundry Aggregator</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="mobile-frame">
+        <main id="app-content">
+            <!-- Dynamic Content Renders Here -->
+        </main>
+        
+        <nav class="bottom-nav">
+            <button class="nav-item active" onclick="app.navigate('home')">
+                <i class="fa-solid fa-house"></i>
+                <span>Home</span>
+            </button>
+            <button class="nav-item" onclick="app.navigate('orders')">
+                <i class="fa-solid fa-list-check"></i>
+                <span>Orders</span>
+            </button>
+            <button class="nav-item" onclick="app.navigate('profile')">
+                <i class="fa-regular fa-user"></i>
+                <span>Profile</span>
+            </button>
+        </nav>
+        
+        <!-- Reusable Slide-up Bottom Sheet -->
+        <div id="bottom-sheet" class="bottom-sheet">
+            <div class="bottom-sheet-overlay" onclick="app.closeSheet()"></div>
+            <div class="bottom-sheet-content">
+                <div class="sheet-drag-handle"></div>
+                <div id="sheet-body"></div>
+            </div>
+        </div>
+    </div>
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>
