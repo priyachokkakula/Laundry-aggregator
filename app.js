@@ -311,6 +311,9 @@ const app = {
     orderStatus: 'weighing',
     orderTimer: null,
     garmentDecision: null,
+    orderedServices: [],
+    confirmedPrice: 0,
+    specialTreatmentCost: 0,
 
     profile: {
         name: 'Priya S.',
@@ -778,25 +781,24 @@ const app = {
             `;
         }
 
-        // Status → active timeline step index (0-based)
-        const stepIndexMap = {
-            weighing: -1, collected: 0, at_vendor: 1,
-            garment_issue: 1, price_update: 1,
-            washing: 2, drying: 3, ironing: 4,
-            packed: 5, out_for_delivery: 6, delivered: 7
+        const stepDefs = this.buildOrderSteps();
+        const stepKeys = stepDefs.map(s => s.key);
+        const statusToKey = {
+            weighing: null, collected: 'collected', at_vendor: 'at_vendor',
+            garment_issue: 'at_vendor', price_update: 'at_vendor',
+            washing: 'washing', drying: 'drying', ironing: 'ironing',
+            packed: 'packed', out_for_delivery: 'out_for_delivery', delivered: 'delivered'
         };
-        const activeIdx = stepIndexMap[this.orderStatus] ?? -1;
-
-        const stepDefs = [
-            { label: 'Clothes Collected',   time: 'Today, 9:00 AM' },
-            { label: 'Arrived at Vendor',   time: 'Today, 9:45 AM' },
-            { label: 'Washing in Progress', time: 'Today, 10:15 AM' },
-            { label: 'Drying',              time: '' },
-            { label: 'Ironing',             time: '' },
-            { label: 'Packed',              time: '' },
-            { label: 'Out for Delivery',    time: '' },
-            { label: 'Delivered',           time: '' }
-        ];
+        const currentKey = statusToKey[this.orderStatus] || null;
+        let activeIdx = currentKey ? stepKeys.indexOf(currentKey) : -1;
+        // If key not in dynamic steps (e.g. 'washing' when only ironing selected), find closest prior step
+        if (currentKey && activeIdx === -1) {
+            const allKeys = ['collected','at_vendor','washing','drying','ironing','packed','out_for_delivery','delivered'];
+            const currentPos = allKeys.indexOf(currentKey);
+            for (let i = stepKeys.length - 1; i >= 0; i--) {
+                if (allKeys.indexOf(stepKeys[i]) <= currentPos) { activeIdx = i; break; }
+            }
+        }
 
         const stepsHTML = stepDefs.map((s, i) => {
             const st = i < activeIdx ? 'completed' : i === activeIdx ? 'active' : 'upcoming';
@@ -832,13 +834,15 @@ const app = {
         const [badgeLabel, badgeBg, badgeColor] = badgeMap[this.orderStatus] || badgeMap.weighing;
 
         // Weighing / confirm pickup card
+        const cartTotal = this.getCartTotal();
+        const totalWithTreatment = this.confirmedPrice + this.specialTreatmentCost;
         const weighingAlert = this.orderStatus === 'weighing' ? `
             <div class="notification-card" style="background:#EFF6FF; border-color:#BFDBFE; display:block; margin-bottom:20px;">
                 <div style="display:flex; gap:12px; margin-bottom:12px;">
                     <i class="fa-solid fa-scale-balanced" style="color:var(--primary); font-size:20px; margin-top:2px;"></i>
                     <div>
                         <h4 style="color:var(--primary); margin-bottom:4px; font-weight:600;">Clothes Weighed</h4>
-                        <p style="color:var(--text-primary); font-size:14px; line-height:1.4;">Your clothes have been weighed. Final price: <strong>₹240</strong>.</p>
+                        <p style="color:var(--text-primary); font-size:14px; line-height:1.4;">Your clothes have been weighed. Final price: <strong>₹${cartTotal}</strong>.</p>
                     </div>
                 </div>
                 <button class="btn-primary" style="width:100%; padding:10px; font-size:14px;" onclick="app.confirmPickup()">Confirm Pickup</button>
@@ -849,10 +853,10 @@ const app = {
                     <i class="fa-solid fa-scale-balanced" style="color:var(--primary); font-size:16px;"></i>
                     <div>
                         <div style="font-size:12px; color:var(--primary); font-weight:600;">Confirmed Price</div>
-                        <div style="font-size:11px; color:var(--text-secondary); margin-top:1px;">Weighed &amp; approved</div>
+                        <div style="font-size:11px; color:var(--text-secondary); margin-top:1px;">Weighed &amp; approved${this.specialTreatmentCost > 0 ? ' · +₹' + this.specialTreatmentCost + ' special treatment' : ''}</div>
                     </div>
                 </div>
-                <div style="font-size:20px; font-weight:700; color:var(--primary);">₹240</div>
+                <div style="font-size:20px; font-weight:700; color:var(--primary);">₹${totalWithTreatment}</div>
             </div>`;
 
         // Garment issue card
@@ -873,6 +877,7 @@ const app = {
             </div>` : '';
 
         // Price update card
+        const updatedPrice = this.confirmedPrice + 50;
         const priceCard = this.orderStatus === 'price_update' ? `
             <div style="background:var(--bg-card); border:1px solid #FCD34D; border-radius:var(--radius-md); padding:16px; margin-bottom:20px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
@@ -883,18 +888,18 @@ const app = {
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px;">
                     <span style="color:var(--text-secondary);">Original estimate:</span>
-                    <span style="font-weight:600; text-decoration:line-through; color:var(--text-secondary);">₹220</span>
+                    <span style="font-weight:600; text-decoration:line-through; color:var(--text-secondary);">₹${this.confirmedPrice}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-size:14px;">
-                    <span style="color:var(--text-secondary);">Updated price:</span>
-                    <span style="font-weight:700; color:var(--primary); font-size:16px;">₹260</span>
+                    <span style="color:var(--text-secondary);">Updated price (with special treatment):</span>
+                    <span style="font-weight:700; color:var(--primary); font-size:16px;">₹${updatedPrice}</span>
                 </div>
                 <div style="font-size:13px; color:var(--text-secondary); background:var(--bg-main); padding:8px; border-radius:8px; margin-bottom:16px;">
-                    <strong>Reason:</strong> Premium wash required for silk shirt
+                    <strong>Reason:</strong> Premium wash required for silk shirt (+₹50)
                 </div>
                 <div style="display:flex; gap:12px;">
-                    <button class="btn-primary" style="flex:1; padding:10px; font-size:14px;" onclick="app.progressOrder('washing')">Approve</button>
-                    <button class="btn-primary" style="flex:1; padding:10px; font-size:14px; background:white; color:#DC2626; border:1px solid #FECACA;" onclick="app.progressOrder('washing')">Decline</button>
+                    <button class="btn-primary" style="flex:1; padding:10px; font-size:14px;" onclick="app.specialTreatmentCost=50; app.confirmedPrice=app.confirmedPrice; app.progressOrder('washing')">Approve ₹${updatedPrice}</button>
+                    <button class="btn-primary" style="flex:1; padding:10px; font-size:14px; background:white; color:#DC2626; border:1px solid #FECACA;" onclick="app.specialTreatmentCost=0; app.progressOrder('washing')">Decline</button>
                 </div>
             </div>` : '';
 
@@ -1004,7 +1009,7 @@ const app = {
                        </button>`
                     : ''}
 
-                <button class="btn-primary" style="width:100%; background:white; color:var(--text-primary); border:1px solid var(--border-color); display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px;" onclick="document.getElementById('report-issue-modal').classList.add('open')">
+                <button class="btn-primary" style="width:100%; background:white; color:var(--text-primary); border:1px solid var(--border-color); display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px;" onclick="document.getElementById('report-issue-form').style.display='block'; document.getElementById('report-issue-success').style.display='none'; document.getElementById('report-issue-modal').classList.add('open')">
                     <i class="fa-solid fa-circle-exclamation"></i> Report an Issue
                 </button>
 
@@ -1041,40 +1046,57 @@ const app = {
             </div>
 
             <!-- Report Issue Modal -->
-            <div id="report-issue-modal" class="modal-overlay">
+            <div id="report-issue-modal" class="modal-overlay" onclick="if(event.target===this) this.classList.remove('open')">
                 <div class="modal-content">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                        <h3 style="font-size:18px; font-weight:700; margin:0;">Report an Issue</h3>
-                        <button class="btn-icon" onclick="document.getElementById('report-issue-modal').classList.remove('open')"><i class="fa-solid fa-xmark"></i></button>
-                    </div>
-                    <div class="input-group" style="margin-bottom:16px; text-align:left;">
-                        <label style="display:block; margin-bottom:8px; font-size:13px; color:var(--text-secondary);">Issue Type</label>
-                        <select style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:var(--radius-md); background:white; font-family:inherit;">
-                            <option>Delay in pickup/delivery</option>
-                            <option>Missing items</option>
-                            <option>Damaged garments</option>
-                            <option>Payment issue</option>
-                            <option>Other</option>
-                        </select>
-                    </div>
-                    <div class="input-group" style="margin-bottom:16px; text-align:left;">
-                        <label style="display:block; margin-bottom:8px; font-size:13px; color:var(--text-secondary);">Description</label>
-                        <textarea rows="4" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:var(--radius-md); background:white; resize:none; font-family:inherit;" placeholder="Please describe the issue in detail..."></textarea>
-                    </div>
-                    <div class="input-group" style="margin-bottom:24px; text-align:left;">
-                        <label style="display:block; margin-bottom:8px; font-size:13px; color:var(--text-secondary);">Attach Photo (Optional)</label>
-                        <div style="border:1px dashed var(--border-color); border-radius:var(--radius-md); padding:20px; text-align:center; background:var(--bg-card); cursor:pointer;">
-                            <i class="fa-solid fa-cloud-arrow-up" style="font-size:24px; color:var(--text-secondary); margin-bottom:8px;"></i>
-                            <div style="font-size:14px; color:var(--text-primary); font-weight:500;">Tap to upload photo</div>
+                    <div id="report-issue-form">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                            <h3 style="font-size:18px; font-weight:700; margin:0;">Report an Issue</h3>
+                            <button class="btn-icon" onclick="document.getElementById('report-issue-modal').classList.remove('open')"><i class="fa-solid fa-xmark"></i></button>
                         </div>
+                        <div class="input-group" style="margin-bottom:16px; text-align:left;">
+                            <label style="display:block; margin-bottom:8px; font-size:13px; color:var(--text-secondary);">Issue Type</label>
+                            <select id="report-issue-type" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:var(--radius-md); background:white; font-family:inherit;">
+                                <option>Delay in pickup/delivery</option>
+                                <option>Missing items</option>
+                                <option>Damaged garments</option>
+                                <option>Payment issue</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div class="input-group" style="margin-bottom:16px; text-align:left;">
+                            <label style="display:block; margin-bottom:8px; font-size:13px; color:var(--text-secondary);">Description</label>
+                            <textarea id="report-issue-desc" rows="4" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:var(--radius-md); background:white; resize:none; font-family:inherit;" placeholder="Please describe the issue in detail..."></textarea>
+                        </div>
+                        <div class="input-group" style="margin-bottom:24px; text-align:left;">
+                            <label style="display:block; margin-bottom:8px; font-size:13px; color:var(--text-secondary);">Attach Photo (Optional)</label>
+                            <label style="border:1px dashed var(--border-color); border-radius:var(--radius-md); padding:20px; text-align:center; background:var(--bg-card); cursor:pointer; display:block;">
+                                <input type="file" accept="image/*" style="display:none;" onchange="document.getElementById('photo-label').textContent=this.files[0]?this.files[0].name:'Tap to upload photo'">
+                                <i class="fa-solid fa-cloud-arrow-up" style="font-size:24px; color:var(--text-secondary); margin-bottom:8px; display:block;"></i>
+                                <div id="photo-label" style="font-size:14px; color:var(--text-primary); font-weight:500;">Tap to upload photo</div>
+                            </label>
+                        </div>
+                        <button class="btn-primary" style="width:100%;" onclick="app.submitIssueReport()">Submit Report</button>
                     </div>
-                    <button class="btn-primary" style="width:100%;" onclick="alert('Issue reported successfully!'); document.getElementById('report-issue-modal').classList.remove('open')">Submit Report</button>
+                    <div id="report-issue-success" style="display:none; text-align:center; padding:12px 0 8px;">
+                        <div style="width:64px; height:64px; background:#F0FDF4; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:28px; color:#16A34A;">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <h3 style="font-size:18px; font-weight:700; margin-bottom:8px;">Issue Reported!</h3>
+                        <p style="font-size:14px; color:var(--text-secondary); line-height:1.5; margin-bottom:24px;">Our support team will review your complaint and reach out within 2 hours.</p>
+                        <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:14px 16px; text-align:left; margin-bottom:24px;">
+                            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">Ticket ID</div>
+                            <div style="font-weight:700; color:var(--primary); font-size:16px;" id="report-ticket-id">#TKT-00000</div>
+                        </div>
+                        <button class="btn-primary" style="width:100%;" onclick="document.getElementById('report-issue-modal').classList.remove('open')">Done</button>
+                    </div>
                 </div>
             </div>
         `;
     },
 
     confirmPickup() {
+        this.confirmedPrice = this.getCartTotal();
+        this.specialTreatmentCost = 0;
         this.orderStatus = 'collected';
         if (this.currentView === 'orders') this.navigate('orders');
         this.scheduleOrderProgress('at_vendor', 10000);
@@ -1085,17 +1107,62 @@ const app = {
         this.orderTimer = setTimeout(() => { this.progressOrder(nextStatus); }, delay);
     },
 
+    buildOrderSteps() {
+        const services = this.orderedServices.length > 0 ? this.orderedServices :
+            (this.selectedVendor ? this.selectedVendor.serviceList.filter(s => this.cart[s.id] > 0).map(s => s.name) : ['Basic Wash']);
+
+        const hasWash = services.some(s => ['Basic Wash', 'Dry Clean', 'Wedding Wear'].includes(s));
+        const hasShoe = services.includes('Shoe Wash');
+        const needsDrying = services.some(s => ['Basic Wash', 'Wedding Wear'].includes(s));
+        const needsIroning = services.some(s => ['Ironing', 'Basic Wash', 'Wedding Wear'].includes(s));
+
+        const steps = [
+            { label: 'Clothes Collected',   time: 'Today, 9:00 AM',  key: 'collected' },
+            { label: 'Arrived at Vendor',   time: 'Today, 9:45 AM',  key: 'at_vendor' },
+        ];
+
+        if (hasWash) {
+            const washLabel = (services.includes('Dry Clean') && !services.includes('Basic Wash')) ? 'Dry Cleaning in Progress' : 'Washing in Progress';
+            steps.push({ label: washLabel, time: 'Today, 10:15 AM', key: 'washing' });
+        }
+        if (hasShoe && !hasWash) {
+            steps.push({ label: 'Shoe Cleaning in Progress', time: 'Today, 10:15 AM', key: 'washing' });
+        }
+        if (needsDrying) {
+            steps.push({ label: 'Drying', time: '', key: 'drying' });
+        }
+        if (needsIroning) {
+            steps.push({ label: 'Ironing', time: '', key: 'ironing' });
+        }
+
+        steps.push({ label: 'Packed',           time: '', key: 'packed' });
+        steps.push({ label: 'Out for Delivery', time: '', key: 'out_for_delivery' });
+        steps.push({ label: 'Delivered',         time: '', key: 'delivered' });
+        return steps;
+    },
+
     progressOrder(status) {
         this.orderStatus = status;
         if (this.currentView === 'orders') this.navigate('orders');
+
+        const services = this.orderedServices.length > 0 ? this.orderedServices :
+            (this.selectedVendor ? this.selectedVendor.serviceList.filter(s => this.cart[s.id] > 0).map(s => s.name) : ['Basic Wash']);
+        const hasWash = services.some(s => ['Basic Wash', 'Dry Clean', 'Wedding Wear', 'Shoe Wash'].includes(s));
+        const needsDrying = services.some(s => ['Basic Wash', 'Wedding Wear'].includes(s));
+        const needsIroning = services.some(s => ['Ironing', 'Basic Wash', 'Wedding Wear'].includes(s));
+
+        const afterWash = needsDrying ? 'drying' : needsIroning ? 'ironing' : 'packed';
+        const afterDry  = needsIroning ? 'ironing' : 'packed';
+        const afterVendor = hasWash ? 'garment_issue' : needsIroning ? 'ironing' : 'packed';
+
         const next = {
-            at_vendor: 'garment_issue',
-            garment_issue: this.garmentDecision === 'declined' ? 'washing' : 'price_update',
-            price_update: 'washing',
-            washing: 'drying',
-            drying: 'ironing',
-            ironing: 'packed',
-            packed: 'out_for_delivery',
+            at_vendor:      afterVendor,
+            garment_issue:  this.garmentDecision === 'declined' ? 'washing' : 'price_update',
+            price_update:   'washing',
+            washing:        afterWash,
+            drying:         afterDry,
+            ironing:        'packed',
+            packed:         'out_for_delivery',
             out_for_delivery: 'delivered'
         };
         if (next[status]) this.scheduleOrderProgress(next[status], 10000);
@@ -1458,7 +1525,7 @@ const app = {
             </div>
             
             <div class="bottom-action-bar">
-                <button class="btn-primary" onclick="app.bookingStep=4; app.navigate('checkout')">Confirm Order</button>
+                <button class="btn-primary" onclick="app.orderedServices=app.selectedVendor.serviceList.filter(s=>app.cart[s.id]>0).map(s=>s.name); app.bookingStep=4; app.navigate('checkout')">Confirm Order</button>
             </div>
         `;
     },
@@ -1534,7 +1601,7 @@ const app = {
             </div>
 
             <div class="bottom-action-bar" style="flex-direction:column; gap:12px; padding:16px 20px 28px;">
-                <button class="btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="app.garmentDecision='approved'; app.progressOrder('price_update'); app.navigate('orders')">
+                <button class="btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="app.garmentDecision='approved'; app.specialTreatmentCost=50; app.progressOrder('price_update'); app.navigate('orders')">
                     <i class="fa-solid fa-check"></i> Approve Special Treatment (+₹50)
                 </button>
                 <button class="btn-primary" style="width:100%; background:white; color:var(--text-primary); border:1px solid var(--border-color); display:flex; align-items:center; justify-content:center; gap:8px;" onclick="app.garmentDecision='declined'; app.progressOrder('washing'); app.navigate('orders')">
@@ -1877,6 +1944,19 @@ const app = {
 
             </div>
         `;
+    },
+
+    submitIssueReport() {
+        const desc = document.getElementById('report-issue-desc');
+        if (!desc || !desc.value.trim()) {
+            desc.style.borderColor = 'var(--danger)';
+            desc.placeholder = 'Please describe the issue before submitting.';
+            return;
+        }
+        const ticketId = '#TKT-' + Math.floor(10000 + Math.random() * 90000);
+        document.getElementById('report-ticket-id').textContent = ticketId;
+        document.getElementById('report-issue-form').style.display = 'none';
+        document.getElementById('report-issue-success').style.display = 'block';
     },
 
     reorder(orderId) {
